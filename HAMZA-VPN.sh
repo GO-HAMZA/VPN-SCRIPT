@@ -218,6 +218,12 @@ edit_banner() {
   echo -e "\e[1;32mBanner updated and SSH restarted.\e[0m"
 }
 
+install_dns() {
+  echo "Installing HAMZA DNS script..."
+  wget -O /tmp/dns.sh https://raw.githubusercontent.com/hamzascript/X-SCRIPT/main/hamza-dns.sh
+  chmod +x /tmp/dns.sh && bash /tmp/dns.sh
+  echo "DNS Script installed."
+}
 
 # Create system folders and files
 mkdir -p /etc/xpanel
@@ -235,7 +241,8 @@ while true; do
   echo -e "\e[1;34m[6] List SSH Accounts\e[0m"
   echo -e "\e[1;34m[7] Check SSH User Status\e[0m"
   echo -e "\e[1;34m[8] Edit Server Message\e[0m"
-  echo -e "\e[1;34m[9] Setup Auto Expiration\e[0m"
+  echo -e "\e[1;34m[9] DNSTT Manager\e[0m"
+  echo -e "\e[1;34m[10] Setup Auto Expiration\e[0m"
   echo -e "\e[1;34m[0] Exit\e[0m"
   echo -e "\e[1;34m──────────────────────────────────────────────\e[0m"
   read -p $'\e[1;34mChoose an option: \e[0m' opt
@@ -249,7 +256,8 @@ while true; do
     6) list_users ;;
     7) show_live_ssh_users ;;
     8) edit_banner ;;
-    9) setup_expiration_cron ;;
+    9) install_dns ;;
+    10) setup_expiration_cron ;;
     0) echo "Goodbye!" && exit 0 ;;
     *) echo "Invalid option." ;;
   esac
