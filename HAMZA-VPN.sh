@@ -220,7 +220,7 @@ edit_banner() {
 
 install_dns() {
   echo "Installing HAMZA DNS script..."
-  curl -O /tmp/dns.sh https://raw.githubusercontent.com/hamzascript/X-SCRIPT/main/hamza-dns.sh
+  curl -o /tmp/dns.sh https://raw.githubusercontent.com/hamzascript/X-SCRIPT/main/hamza-dns.sh
   chmod +x /tmp/dns.sh && bash /tmp/dns.sh
   echo "DNS Script installed."
 }
