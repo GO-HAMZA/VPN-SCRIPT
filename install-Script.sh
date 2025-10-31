@@ -1,21 +1,5 @@
 #!/bin/bash
 
-# ✪ X - PANEL HAMZA ✪
-show_banner() {
-  clear
-  echo -e "\e[1;36m"
-  echo "██╗  ██╗ █████╗ ███╗   ███╗███████╗ █████╗"
-  echo "██║  ██║██╔══██╗████╗ ████║██╔════╝██╔══██╗"
-  echo "███████║███████║██╔████╔██║█████╗  ███████║"
-  echo "██╔══██║██╔══██║██║╚██╔╝██║██╔══╝  ██╔══██║"
-  echo "██║  ██║██║  ██║██║ ╚═╝ ██║███████╗██║  ██║"
-  echo "╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝"
-  echo -e "\e[0m"
-  echo -e "\e[1;33m         "
-  echo -e "\e[1;37m         "
-  echo
-}
-
 # Set up cron job for automatic expiration check
 setup_expiration_cron() {
   # Create daily expiration check script
