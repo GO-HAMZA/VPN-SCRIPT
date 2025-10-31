@@ -217,6 +217,7 @@ chmod 600 /etc/xpanel/users.txt
 # Main menu
 while true; do
   clear
+  echo -e "\e[1;34m──────────────────────────────────────────────\e[0m"
   echo -e "\e[1;34m[1] Install VPN Protocols\e[0m"
   echo -e "\e[1;34m[2] Install 3X-UI Panel\e[0m"
   echo -e "\e[1;34m[3] Create SSH Account\e[0m"
