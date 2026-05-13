@@ -44,12 +44,8 @@ if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-is_number() {
-    [[ $1 =~ ^[0-9]+$ ]]
-}
-
 # =============================================
-# AUTO-KILL & EXPIRY MONITOR (PYTHON)
+# EXPIRY MONITOR (PYTHON) - AGGRESSIVE KILL
 # =============================================
 cat > "$MONITOR_SCRIPT" << 'EOF'
 #!/usr/bin/env python3
@@ -62,7 +58,7 @@ LOG_FILE = "/var/log/kp_manager.log"
 alert_cache = {}
 
 def load_config():
-    c = {"MAX_LOGIN": "1"}
+    c = {}
     try:
         for l in open(CONF_FILE):
             if "=" in l: k, v = l.strip().split("=", 1); c[k] = v.strip().replace('"', '')
@@ -93,14 +89,14 @@ def send_alert(msg, user_key):
     except: pass
 
 def kill_user(user):
-    subprocess.run(["loginctl", "terminate-user", user], stderr=subprocess.DEVNULL)
-    subprocess.run(["pkill", "-KILL", "-u", user], stderr=subprocess.DEVNULL)
+    os.system(f"usermod -L {user} >/dev/null 2>&1")
+    os.system(f"pkill -9 -u {user} >/dev/null 2>&1")
+    os.system(f"ps xaf | grep -E 'sshd|dropbear' | grep ' {user} ' | grep -v grep | awk '{{print $1}}' | xargs -r kill -9 >/dev/null 2>&1")
+    os.system(f"loginctl terminate-user {user} >/dev/null 2>&1")
 
 def check_loop():
     while True:
         try:
-            cfg = load_config()
-            
             if os.path.exists(DB_FILE):
                 with open(DB_FILE, 'r+') as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
@@ -113,12 +109,6 @@ def check_loop():
                         parts = line.strip().split('|')
                         if len(parts) < 3: continue
                         user, exp_date, exp_time = parts[0], parts[1], parts[2]
-                        
-                        user_max = 1
-                        if len(parts) > 3 and parts[3].isdigit():
-                            user_max = int(parts[3])
-                        else:
-                            user_max = int(cfg.get("MAX_LOGIN", 1))
 
                         if "V1" in user or "Turbo" in user or user == "root":
                             new_lines.append(line); continue
@@ -128,26 +118,16 @@ def check_loop():
                             try:
                                 exp = datetime.datetime.strptime(f"{exp_date} {exp_time}", "%Y-%m-%d %H:%M")
                                 if now >= exp:
-                                    subprocess.run(["usermod", "-L", user], stderr=subprocess.DEVNULL)
                                     kill_user(user)
                                     status_changed = True; expired = True
-                                    log_event(f"ACCOUNT EXPIRED: {user} locked.")
-                                    send_alert(f"🔒 <b>ACCOUNT EXPIRED</b>\n\n👤 User: <code>{user}</code>\n🛑 Account automatically locked.", f"{user}_exp")
+                                    log_event(f"ACCOUNT EXPIRED: {user} locked and disconnected.")
+                                    send_alert(f"🔒 <b>ACCOUNT EXPIRED</b>\n\n👤 User: <code>{user}</code>\n🛑 Account forcefully disconnected.", f"{user}_exp")
                             except: pass
                         
                         if expired:
-                            new_lines.append(f"{user}|EXPIRED|00:00|{user_max}\n")
+                            new_lines.append(f"{user}|EXPIRED|00:00\n")
                             continue
 
-                        try:
-                            ssh_procs = subprocess.getoutput(f"ps -u {user} -o comm= 2>/dev/null | grep -cE 'sshd|dropbear'")
-                            total = int(ssh_procs) if ssh_procs.strip().isdigit() else 0
-                            
-                            if total > user_max:
-                                kill_user(user)
-                                log_event(f"MULTI-LOGIN KICK: {user} used {total} connections (Max: {user_max}).")
-                                send_alert(f"⚠️ <b>MULTI-LOGIN DETECTED</b>\n\n👤 User: <code>{user}</code>\n💻 Devices: {total}/{user_max}\n🛑 User has been kicked out.", f"{user}_multi")
-                        except: pass
                         new_lines.append(line)
                     
                     if status_changed:
@@ -196,27 +176,30 @@ fun_create() {
     echo -ne " ${BLUE}👤 Enter Username : ${NC}"
     read u
     if [[ -z "$u" ]]; then echo -e "\n${RED} ❌ Username cannot be empty!${NC}"; pause; return; fi
-    # Validate username (letters and numbers only to prevent injection)
     if [[ ! "$u" =~ ^[a-zA-Z0-9_]+$ ]]; then echo -e "\n${RED} ❌ Invalid Username! Use only letters and numbers.${NC}"; pause; return; fi
     if id "$u" &>/dev/null || grep -q "^$u|" "$USER_DB"; then echo -e "\n${RED} ❌ USER ALREADY EXISTS!${NC}"; pause; return; fi
 
     echo -ne " ${BLUE}🔑 Enter Password : ${NC}"
     read p
     if [[ -z "$p" ]]; then echo -e "\n${RED} ❌ Password cannot be empty!${NC}"; pause; return; fi
-    
-    echo -ne " ${BLUE}💻 Enter Max Logins (Default 1) : ${NC}"
-    read max_l
-    if ! [[ "$max_l" =~ ^[0-9]+$ ]]; then max_l=1; fi
 
-    echo -ne " ${BLUE}⏳ Set Expiry Date? [Y/N] : ${NC}"
+    echo -ne " ${BLUE}⏳ Set Expiry Date [Y/N] : ${NC}"
     read exp_choice
     if [[ "${exp_choice,,}" == "y" ]]; then
-        echo -ne " ${BLUE}📅 Enter Date and Time (YYYY-MM-DD HH:MM) : ${NC}"
-        read dt_input
-        d=$(echo "$dt_input" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
-        t=$(echo "$dt_input" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
-        [[ -z "$d" ]] && d="NEVER"
-        [[ -z "$t" ]] && t="00:00"
+        echo -ne " ${BLUE}📅 Enter number of days : ${NC}"
+        read CUSTOM_DAYS
+        if [[ "$CUSTOM_DAYS" =~ ^[0-9]+$ ]] && [ "$CUSTOM_DAYS" -gt 0 ]; then
+            START_TIMESTAMP=$(date +%s)
+            SECONDS_IN_DURATION=$(( CUSTOM_DAYS * 24 * 60 * 60 ))
+            EXPIRATION_TIMESTAMP=$(( START_TIMESTAMP + SECONDS_IN_DURATION ))
+            d=$(date -d "@$EXPIRATION_TIMESTAMP" +"%Y-%m-%d")
+            t=$(date -d "@$EXPIRATION_TIMESTAMP" +"%H:%M")
+        else
+            echo -e "\n${RED} ❌ Invalid number of days! Setting to NEVER.${NC}"
+            sleep 2
+            d="NEVER"
+            t="00:00"
+        fi
     else
         d="NEVER"
         t="00:00"
@@ -225,10 +208,9 @@ fun_create() {
     useradd -M -s /bin/false "$u" >/dev/null 2>&1
     echo "$u:$p" | chpasswd >/dev/null 2>&1
     
-    # Secure file locking in Bash
     (
         flock -x 200
-        echo "$u|$d|$t|$max_l" >> "$USER_DB"
+        echo "$u|$d|$t" >> "$USER_DB"
     ) 200>"/etc/xpanel/.db.lock"
 
     clear
@@ -245,19 +227,24 @@ fun_renew() {
     echo -ne " ${BLUE}👤 USERNAME : ${NC}"
     read u
     if ! grep -q "^$u|" "$USER_DB"; then echo -e "\n${RED} ❌ NOT FOUND!${NC}"; pause; return; fi
-    
-    echo -ne " ${BLUE}💻 Enter New Max Logins (Default 1) : ${NC}"
-    read max_l
-    if ! [[ "$max_l" =~ ^[0-9]+$ ]]; then max_l=1; fi
 
-    echo -ne " ${BLUE}⏳ Set Expiry Date? [Y/N] : ${NC}"
+    echo -ne " ${BLUE}⏳ Set Expiry Date [Y/N] : ${NC}"
     read exp_choice
     if [[ "${exp_choice,,}" == "y" ]]; then
-        echo -ne " ${BLUE}📅 Enter New Date and Time (YYYY-MM-DD HH:MM) : ${NC}"
-        read dt_input
-        d=$(echo "$dt_input" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
-        t=$(echo "$dt_input" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
-        [[ -z "$d" ]] && d="NEVER"; [[ -z "$t" ]] && t="23:59"
+        echo -ne " ${BLUE}📅 Enter number of days to renew : ${NC}"
+        read CUSTOM_DAYS
+        if [[ "$CUSTOM_DAYS" =~ ^[0-9]+$ ]] && [ "$CUSTOM_DAYS" -gt 0 ]; then
+            START_TIMESTAMP=$(date +%s)
+            SECONDS_IN_DURATION=$(( CUSTOM_DAYS * 24 * 60 * 60 ))
+            EXPIRATION_TIMESTAMP=$(( START_TIMESTAMP + SECONDS_IN_DURATION ))
+            d=$(date -d "@$EXPIRATION_TIMESTAMP" +"%Y-%m-%d")
+            t=$(date -d "@$EXPIRATION_TIMESTAMP" +"%H:%M")
+        else
+            echo -e "\n${RED} ❌ Invalid number of days! Setting to NEVER.${NC}"
+            sleep 2
+            d="NEVER"
+            t="23:59"
+        fi
     else
         d="NEVER"; t="00:00"
     fi
@@ -265,7 +252,7 @@ fun_renew() {
     (
         flock -x 200
         sed -i "/^$u|/d" "$USER_DB"
-        echo "$u|$d|$t|$max_l" >> "$USER_DB"
+        echo "$u|$d|$t" >> "$USER_DB"
     ) 200>"/etc/xpanel/.db.lock"
 
     usermod -U "$u" >/dev/null 2>&1
@@ -277,7 +264,7 @@ fun_remove() {
     echo -e "               🗑️ ${BLUE}DELETE ACCOUNT${NC}\n${LINE}"
     echo -ne " ${BLUE}👤 USERNAME : ${NC}"
     read u
-    echo -ne " ${BLUE}⚠️ CONFIRM? [Y/N]: ${NC}"
+    echo -ne " ${BLUE}⚠️ CONFIRM [Y/N]: ${NC}"
     read c
     if [[ "${c,,}" == "y" ]]; then
         loginctl terminate-user "$u" >/dev/null 2>&1
@@ -301,7 +288,7 @@ fun_lock() {
     echo -ne " ${BLUE}SELECT: ${NC}"
     read s
     if [[ "$s" == "1" ]]; then
-        usermod -L "$u" >/dev/null 2>&1; loginctl terminate-user "$u" >/dev/null 2>&1; pkill -KILL -u "$u" >/dev/null 2>&1; echo -e "\n${GREEN} ⛔ LOCKED${NC}"
+        usermod -L "$u" >/dev/null 2>&1; loginctl terminate-user "$u" >/dev/null 2>&1; pkill -KILL -u "$u" >/dev/null 2>&1; ps xaf | grep -E 'sshd|dropbear' | grep " $u " | grep -v grep | awk '{print $1}' | xargs -r kill -9 >/dev/null 2>&1; echo -e "\n${GREEN} ⛔ LOCKED & DISCONNECTED${NC}"
     else
         usermod -U "$u" >/dev/null 2>&1; echo -e "\n${GREEN} 🔓 UNLOCKED${NC}"
     fi
@@ -312,7 +299,7 @@ fun_list() {
     clear
     echo -e "${LINE}\n               📋 ${BLUE}LIST ACCOUNTS${NC}\n${LINE}"
     SHADOW_CACHE=$(cat /etc/shadow 2>/dev/null)
-    while IFS='|' read -r u d t m_val rest; do
+    while IFS='|' read -r u d t rest; do
         [[ -z "$u" ]] && continue
         if id "$u" &>/dev/null; then
              if [[ "$d" == "NEVER" || "$d" == "EXPIRED" ]]; then DATE_STR="$d"; else DATE_STR="$d $t"; fi
@@ -324,11 +311,49 @@ fun_list() {
     pause
 }
 
+fun_search() {
+    clear
+    echo -e "${LINE}\n               🔍 ${BLUE}SEARCH ACCOUNT${NC}\n${LINE}"
+    echo -ne " ${BLUE}👤 Enter Username : ${NC}"
+    read search_q
+    
+    if [[ -z "$search_q" ]]; then 
+        echo -e "\n${RED} ❌ Search cannot be empty!${NC}"
+        pause; return
+    fi
+
+    results=$(grep -i "$search_q" "$USER_DB")
+    
+    if [[ -z "$results" ]]; then
+        echo -e "\n${RED} ❌ NO USER FOUND MATCHING: ${WHITE}$search_q${NC}"
+    else
+        echo -e "\n${GREEN} ✅ RESULTS FOUND:${NC}\n"
+        SHADOW_CACHE=$(cat /etc/shadow 2>/dev/null)
+        
+        while IFS='|' read -r u d t rest; do
+            [[ -z "$u" ]] && continue
+            if id "$u" &>/dev/null; then
+                 if [[ "$d" == "NEVER" || "$d" == "EXPIRED" ]]; then DATE_STR="$d"; else DATE_STR="$d $t"; fi
+                 if echo "$SHADOW_CACHE" | grep -q "^${u}:!"; then 
+                     LOCK_STAT="${RED}⛔ LOCKED (EXPIRED OR BANNED)${NC}"
+                 else 
+                     LOCK_STAT="${GREEN}🟢 ACTIVE${NC}"
+                 fi
+                 echo -e " ${BLUE}👤 Username :${NC} ${WHITE}$u${NC}"
+                 echo -e " ${BLUE}📊 Status   :${NC} $LOCK_STAT"
+                 echo -e " ${BLUE}📅 Expiry   :${NC} ${WHITE}$DATE_STR${NC}"
+                 echo -e " ${LINE}"
+            fi
+        done <<< "$results"
+    fi
+    pause
+}
+
 fun_monitor_view() {
     clear
     echo -e "${LINE}\n               👁 ${BLUE}MONITOR ACCOUNT${NC}\n${LINE}"
     ACTIVE_PROCS=$(ps -eo user,comm 2>/dev/null | grep -E 'sshd|dropbear')
-    while IFS='|' read -r u d t m_val rest; do
+    while IFS='|' read -r u d t rest; do
         [[ -z "$u" ]] && continue
         if id "$u" &>/dev/null; then
              if echo "$ACTIVE_PROCS" | grep -q "^${u} "; then
@@ -360,7 +385,7 @@ fun_import_users() {
     draw_header; echo -e "${BLUE} 📥 RESTORING USERS...${NC}"
     if [[ ! -f "$MIGRATION_FILE" ]]; then echo -e "${RED} ❌ FILE NOT FOUND ($MIGRATION_FILE)${NC}"; pause; return; fi
     count=0
-    while IFS='|' read -r u d t m tag; do
+    while IFS='|' read -r u d t rest; do
         [[ -z "$u" ]] && continue
         if ! id "$u" &>/dev/null; then
             useradd -M -s /bin/false "$u" >/dev/null 2>&1; echo "$u:12345" | chpasswd >/dev/null 2>&1
@@ -373,12 +398,12 @@ fun_import_users() {
 
 fun_violations() {
     clear
-    echo -e "${LINE}\n         🔔 ${BLUE}ALERTS LOG (VIOLATIONS)${NC}\n${LINE}\n"
+    echo -e "${LINE}\n         🔔 ${BLUE}ALERTS LOG (EXPIRED LOGS)${NC}\n${LINE}\n"
     if [ -f "$LOG_FILE" ]; then
-        ALERTS=$(grep "MULTI-LOGIN KICK" "$LOG_FILE" | tail -n 15)
-        if [[ -z "$ALERTS" ]]; then echo -e " ${GREEN}✅ NO VIOLATIONS DETECTED YET.${NC}"
+        ALERTS=$(grep "ACCOUNT EXPIRED" "$LOG_FILE" | tail -n 15)
+        if [[ -z "$ALERTS" ]]; then echo -e " ${GREEN}✅ NO EXPIRED ACCOUNTS DETECTED YET.${NC}"
         else
-            while read -r line; do echo -e " ${RED}⚠️  $line${NC}"; done <<< "$ALERTS"
+            while read -r line; do echo -e " ${YELLOW}🕒 $line${NC}"; done <<< "$ALERTS"
         fi
     else
         echo -e " ${YELLOW}LOG FILE IS EMPTY.${NC}"
@@ -410,16 +435,13 @@ fun_install_bot() {
     echo -e "${YELLOW}⚙️ Installing Python dependencies in Secure VENV...${NC}"
     $PIP_BIN install urllib3==1.26.15 python-telegram-bot==13.7 schedule requests >/dev/null 2>&1
     
-    if ! grep -q "MAX_LOGIN" "$BOT_CONF" 2>/dev/null; then
-        echo "MAX_LOGIN=\"1\"" >> "$BOT_CONF"
-    fi
     echo "BOT_TOKEN=\"$input_token\"" > "$BOT_CONF"
     echo "ADMIN_ID=\"$input_id\"" >> "$BOT_CONF"
     echo "ALERTS=\"ON\"" >> "$BOT_CONF"
     chmod 600 "$BOT_CONF"
     
     cat > /root/ssh_bot.py << 'EOF'
-import logging, os, subprocess, re, fcntl
+import logging, os, subprocess, re, fcntl, datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 
@@ -439,22 +461,20 @@ def load_config():
 
 cfg = load_config(); TOKEN = cfg.get("BOT_TOKEN"); ADMIN_ID = int(cfg.get("ADMIN_ID", 0))
 
-def safe_cmd(cmd_list):
-    try:
-        return subprocess.run(cmd_list, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-    except: return False
-
 def kill_user(user):
-    subprocess.run(["loginctl", "terminate-user", user], stderr=subprocess.DEVNULL)
-    subprocess.run(["pkill", "-KILL", "-u", user], stderr=subprocess.DEVNULL)
+    os.system(f"usermod -L {user} >/dev/null 2>&1")
+    os.system(f"pkill -9 -u {user} >/dev/null 2>&1")
+    os.system(f"ps xaf | grep -E 'sshd|dropbear' | grep ' {user} ' | grep -v grep | awk '{{print $1}}' | xargs -r kill -9 >/dev/null 2>&1")
+    os.system(f"loginctl terminate-user {user} >/dev/null 2>&1")
 
 def get_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👤 CREATE ACCOUNT", callback_data='add'), InlineKeyboardButton("🔄 RENEW ACCOUNT", callback_data='ren')],
-        [InlineKeyboardButton("🗑 DELETE ACCOUNT", callback_data='del'), InlineKeyboardButton("🔒 LOCK ACCOUNT", callback_data='lock_menu')],
-        [InlineKeyboardButton("📋 LIST ACCOUNTS", callback_data='list'), InlineKeyboardButton("👁 MONITOR ACCOUNT", callback_data='onl')],
-        [InlineKeyboardButton("💾 BACKUP DATA", callback_data='bak'), InlineKeyboardButton("🔔 ALERTS LOG", callback_data='alerts')],
-        [InlineKeyboardButton("⚙ SETTINGS", callback_data='bot_set'), InlineKeyboardButton("🚪 EXIT", callback_data='close')]
+        [InlineKeyboardButton("👤 CREATE", callback_data='add'), InlineKeyboardButton("🔄 RENEW", callback_data='ren')],
+        [InlineKeyboardButton("🗑 DELETE", callback_data='del'), InlineKeyboardButton("🔒 LOCK/UNLOCK", callback_data='lock_menu')],
+        [InlineKeyboardButton("📋 LIST ALL", callback_data='list'), InlineKeyboardButton("🔍 SEARCH", callback_data='search_menu')],
+        [InlineKeyboardButton("👁 MONITOR", callback_data='onl'), InlineKeyboardButton("💾 BACKUP", callback_data='bak')],
+        [InlineKeyboardButton("🔔 ALERTS", callback_data='alerts'), InlineKeyboardButton("⚙ SETTINGS", callback_data='bot_set')],
+        [InlineKeyboardButton("🚪 EXIT", callback_data='close')]
     ])
 
 def get_settings_menu():
@@ -485,16 +505,16 @@ def btn(u, c):
             
         elif d == 'add_yes':
             c.user_data['act'] = 'a_datetime'
-            q.edit_message_text(f"👤 Username : <code>{c.user_data['u']}</code>\n🔑 Password  : <code>{c.user_data['p']}</code>\n\n📅 <b>Enter Date, Time, and Max Logins</b>\n(Example: 2026-12-31 23:59 2):", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
+            q.edit_message_text(f"👤 Username : <code>{c.user_data['u']}</code>\n🔑 Password  : <code>{c.user_data['p']}</code>\n\n📅 <b>Enter number of days:</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
             
         elif d == 'add_no':
-            usr = c.user_data['u']; pwd = c.user_data['p']; dt = "NEVER"; tm = "00:00"; max_l = "1"
+            usr = c.user_data['u']; pwd = c.user_data['p']; dt = "NEVER"; tm = "00:00"
             subprocess.run(["useradd", "-M", "-s", "/bin/false", usr], stdout=subprocess.DEVNULL)
             subprocess.run(["chpasswd"], input=f"{usr}:{pwd}".encode(), stdout=subprocess.DEVNULL)
             
             with open(DB_FILE, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(f"{usr}|{dt}|{tm}|{max_l}\n")
+                f.write(f"{usr}|{dt}|{tm}\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
                 
             resp = (f"<b>{TLINE}</b>\n           <b>ACCOUNT CREATED</b>          \n<b>{TLINE}</b>\n\n👤 Username : <code>{usr}</code>\n🔑 Password : <code>{pwd}</code>\n📅 Expiry   : <code>{dt}</code>\n⏰ Time     : <code>{tm}</code>\n\n<b>{TLINE}</b>\n📋 Copy     : <code>{usr}:{pwd}</code>\n<b>{TLINE}</b>")
@@ -503,18 +523,18 @@ def btn(u, c):
 
         elif d == 'ren': 
             c.user_data['act']='r_user'
-            q.edit_message_text("🔄 <b>Enter Username to Renew:</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
+            q.edit_message_text("🔄 <b>Enter Username :</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
             
         elif d == 'ren_yes':
             c.user_data['act'] = 'r_val'
-            q.edit_message_text("📅 <b>Enter New Date, Time, and Max Logins</b>\n(Example: 2026-12-31 23:59 2):", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
+            q.edit_message_text("📅 <b>Enter number of days to renew:</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
             
         elif d == 'ren_no':
             usr = c.user_data.get('ru')
             with open(DB_FILE, 'r+') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
                 lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
-                lines.append(f"{usr}|NEVER|00:00|1\n")
+                lines.append(f"{usr}|NEVER|00:00\n")
                 f.seek(0); f.writelines(lines); f.truncate()
                 fcntl.flock(f, fcntl.LOCK_UN)
                 
@@ -543,18 +563,21 @@ def btn(u, c):
 
         elif d == 'lock_menu':
             c.user_data['act']='lu_user'
-            q.edit_message_text("🔒/🔓 <b>Enter Username to Lock or Unlock:</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
+            q.edit_message_text("🔒/🔓 <b>Enter Username :</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
             
         elif d.startswith('do_lock_'):
             usr = d.split('_', 2)[2]
-            subprocess.run(["usermod", "-L", usr], stdout=subprocess.DEVNULL)
             kill_user(usr)
-            q.edit_message_text(f"⛔ <b>LOCKED:</b> <code>{usr}</code>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
+            q.edit_message_text(f"⛔ <b>LOCKED & DISCONNECTED:</b> <code>{usr}</code>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
             
         elif d.startswith('do_unlock_'):
             usr = d.split('_', 2)[2]
             subprocess.run(["usermod", "-U", usr], stdout=subprocess.DEVNULL)
             q.edit_message_text(f"🔓 <b>UNLOCKED:</b> <code>{usr}</code>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
+            
+        elif d == 'search_menu':
+            c.user_data['act'] = 'search_u'
+            q.edit_message_text("🔍 <b>Enter Username :</b>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
 
         elif d == 'list':
             if os.path.exists(DB_FILE):
@@ -633,13 +656,13 @@ def btn(u, c):
         elif d == 'alerts':
             if os.path.exists(LOG_FILE):
                 try:
-                    alerts_raw = subprocess.getoutput(f"grep 'MULTI-LOGIN KICK' {LOG_FILE} | tail -n 15")
+                    alerts_raw = subprocess.getoutput(f"grep 'ACCOUNT EXPIRED' {LOG_FILE} | tail -n 15")
                     if not alerts_raw.strip():
-                        msg = "✅ <b>NO VIOLATIONS DETECTED YET.</b>"
+                        msg = "✅ <b>NO EXPIRED ACCOUNTS YET.</b>"
                     else:
-                        msg = "🔔 <b>ALERTS LOG (VIOLATIONS)</b>\n\n"
+                        msg = "🔔 <b>ALERTS LOG (EXPIRED)</b>\n\n"
                         for l in alerts_raw.split('\n'):
-                            if l.strip(): msg += f"⚠️ {l}\n"
+                            if l.strip(): msg += f"🕒 {l}\n"
                 except:
                     msg = "Error reading log."
             else:
@@ -689,7 +712,7 @@ def txt(u, c):
         elif act == 'add_p':
             c.user_data['p'] = msg.strip()
             kb = InlineKeyboardMarkup([[InlineKeyboardButton("🟢 YES", callback_data='add_yes'), InlineKeyboardButton("🔴 NO", callback_data='add_no')], [InlineKeyboardButton("🔙 BACK", callback_data='back')]])
-            u.message.reply_text(f"👤 Username: <code>{c.user_data['u']}</code>\n🔑 Password: <code>{c.user_data['p']}</code>\n\n⏳ <b>Set Expiry Date and Max Logins?</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
+            u.message.reply_text(f"👤 Username: <code>{c.user_data['u']}</code>\n🔑 Password: <code>{c.user_data['p']}</code>\n\n⏳ <b>Set Expiry Date by Days?</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
             c.user_data['act'] = ''
 
         elif act == 'lu_user':
@@ -701,25 +724,55 @@ def txt(u, c):
         elif act == 'r_user':
             c.user_data['ru'] = msg.strip()
             kb = InlineKeyboardMarkup([[InlineKeyboardButton("🟢 YES", callback_data='ren_yes'), InlineKeyboardButton("🔴 NO", callback_data='ren_no')], [InlineKeyboardButton("🔙 BACK", callback_data='back')]])
-            u.message.reply_text(f"⏳ <b>Set New Expiry Date and Max Logins for {msg}?</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
+            u.message.reply_text(f"⏳ <b>Set Expiry Date by Days for {msg}?</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
+            c.user_data['act'] = ''
+
+        elif act == 'search_u':
+            search_q = msg.strip().lower()
+            if os.path.exists(DB_FILE):
+                try: shadow_data = open('/etc/shadow', 'r').read()
+                except: shadow_data = ""
+                
+                results = []
+                for l in open(DB_FILE):
+                    parts = l.strip().split('|')
+                    if len(parts) >= 3 and search_q in parts[0].lower() and "root" not in parts[0]:
+                        usr, date, tm = parts[0], parts[1], parts[2]
+                        date_str = date if date in ["NEVER", "EXPIRED"] else f"{date} {tm}"
+                        if f"\n{usr}:!" in shadow_data or shadow_data.startswith(f"{usr}:!"):
+                            lock_stat = "⛔ LOCKED"
+                        else:
+                            lock_stat = "🟢 ACTIVE"
+                        results.append(f"👤 <code>{usr}</code>\n📊 {lock_stat}\n📅 <code>{date_str}</code>\n")
+                
+                if results:
+                    reply_text = f"✅ <b>RESULTS FOUND:</b>\n\n" + "\n".join(results[:10])
+                    if len(results) > 10: reply_text += f"\n...and {len(results)-10} more."
+                else:
+                    reply_text = f"❌ <b>NO USER FOUND MATCHING:</b> {msg.strip()}"
+            else:
+                reply_text = "No database found."
+                
+            u.message.reply_text(reply_text, parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
             c.user_data['act'] = ''
 
         elif act == 'a_datetime':
             usr = c.user_data['u']; pwd = c.user_data['p']
+            msg_str = msg.strip()
             
-            parts = msg.strip().split()
-            d = "NEVER"; t = "00:00"; max_l = "1"
-            for p in parts:
-                if re.match(r'^\d{4}-\d{2}-\d{2}$', p): d = p
-                elif re.match(r'^\d{2}:\d{2}$', p): t = p
-                elif p.isdigit(): max_l = p
+            if msg_str.isdigit() and int(msg_str) > 0:
+                exp_date = datetime.datetime.now() + datetime.timedelta(days=int(msg_str))
+                d = exp_date.strftime("%Y-%m-%d")
+                t = exp_date.strftime("%H:%M")
+            else:
+                d = "NEVER"; t = "00:00"
             
             subprocess.run(["useradd", "-M", "-s", "/bin/false", usr], stdout=subprocess.DEVNULL)
             subprocess.run(["chpasswd"], input=f"{usr}:{pwd}".encode(), stdout=subprocess.DEVNULL)
             
             with open(DB_FILE, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(f"{usr}|{d}|{t}|{max_l}\n")
+                f.write(f"{usr}|{d}|{t}\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
                 
             resp = (f"<b>{TLINE}</b>\n           <b>ACCOUNT CREATED</b>          \n<b>{TLINE}</b>\n\n👤 Username : <code>{usr}</code>\n🔑 Password : <code>{pwd}</code>\n📅 Expiry   : <code>{d}</code>\n⏰ Time     : <code>{t}</code>\n\n<b>{TLINE}</b>\n📋 Copy     : <code>{usr}:{pwd}</code>\n<b>{TLINE}</b>")
@@ -728,18 +781,19 @@ def txt(u, c):
             
         elif act == 'r_val':
             usr = c.user_data.get('ru')
+            msg_str = msg.strip()
             
-            parts = msg.strip().split()
-            d = "NEVER"; t = "23:59"; max_l = "1"
-            for p in parts:
-                if re.match(r'^\d{4}-\d{2}-\d{2}$', p): d = p
-                elif re.match(r'^\d{2}:\d{2}$', p): t = p
-                elif p.isdigit(): max_l = p
+            if msg_str.isdigit() and int(msg_str) > 0:
+                exp_date = datetime.datetime.now() + datetime.timedelta(days=int(msg_str))
+                d = exp_date.strftime("%Y-%m-%d")
+                t = exp_date.strftime("%H:%M")
+            else:
+                d = "NEVER"; t = "23:59"
             
             with open(DB_FILE, 'r+') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
                 lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
-                lines.append(f"{usr}|{d}|{t}|{max_l}\n")
+                lines.append(f"{usr}|{d}|{t}\n")
                 f.seek(0); f.writelines(lines); f.truncate()
                 fcntl.flock(f, fcntl.LOCK_UN)
                 
@@ -802,7 +856,7 @@ fun_settings() {
         case "$s" in
             1) fun_install_bot ;;
             2) 
-                echo -ne " ${BLUE}🌍 Enter Timezone (e.g., Africa/Tunis, Asia/Riyadh): ${NC}"
+                echo -ne " ${BLUE}🌍 Enter Timezone : ${NC}"
                 read tz
                 if timedatectl set-timezone "$tz" 2>/dev/null; then
                     echo -e "\n${GREEN} ✅ TIMEZONE SET TO $tz${NC}"; pause
@@ -828,10 +882,11 @@ while true; do
     echo -e "  ${BLUE}[03] 🗑 DELETE ACCOUNT${NC}"
     echo -e "  ${BLUE}[04] ⛔ LOCK ACCOUNT${NC}"
     echo -e "  ${BLUE}[05] 📋 LIST ACCOUNTS${NC}"
-    echo -e "  ${BLUE}[06] 👁 MONITOR ACCOUNT${NC}"
-    echo -e "  ${BLUE}[07] 💾 BACKUP DATA${NC}"
-    echo -e "  ${BLUE}[08] 🔔 ALERTS LOG${NC}"
-    echo -e "  ${BLUE}[09] ⚙️ SETTINGS${NC}  "
+    echo -e "  ${BLUE}[06] 🔍 SEARCH ACCOUNT${NC}"
+    echo -e "  ${BLUE}[07] 👁 MONITOR ACCOUNT${NC}"
+    echo -e "  ${BLUE}[08] 💾 BACKUP DATA${NC}"
+    echo -e "  ${BLUE}[09] 🔔 EXPIRED ACCOUNTS${NC}"
+    echo -e "  ${BLUE}[10] ⚙️ SETTINGS${NC}"
     echo -e "  ${BLUE}[00] ↪️ EXIT${NC}\n${LINE}"
     echo -ne "  ${BLUE}SELECT:${NC} "
     read o
@@ -841,10 +896,11 @@ while true; do
         3|03) fun_remove ;; 
         4|04) fun_lock ;;
         5|05) fun_list ;; 
-        6|06) fun_monitor_view ;; 
-        7|07) fun_backup ;; 
-        8|08) fun_violations ;; 
-        9|09) fun_settings ;;  
+        6|06) fun_search ;; 
+        7|07) fun_monitor_view ;; 
+        8|08) fun_backup ;; 
+        9|09) fun_violations ;; 
+        10) fun_settings ;;  
         0|00) clear; exit 0 ;;
         *) echo -e "\n${RED} INVALID OPTION!${NC}" ; sleep 1 ;;
     esac
