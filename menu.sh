@@ -26,14 +26,14 @@ install_protocols() {
 # INSTALL WS FOR SSH
 install_ws_ssh() {
     clear
-    echo -e "${CYAN}=== SETUP WEBSOCKET-VPN FOR SSH ===${NC}"
-    if [ ! -f "$WORK_DIR/WebSocket-VPN" ]; then
-        echo -e "${RED}❌ ERROR: 'WEBSOCKET-VPN' NOT FOUND IN $WORK_DIR${NC}"
+    echo -e "${CYAN}=== SETUP WEBSOCKET-GO FOR SSH ===${NC}"
+    if [ ! -f "$WORK_DIR/WebSocket-GO" ]; then
+        echo -e "${RED}❌ ERROR: 'WebSocket-GO' NOT FOUND IN $WORK_DIR${NC}"
         echo -e "PRESS [ENTER] TO RETURN..."
         read
         return
     fi
-    chmod 777 "$WORK_DIR/WebSocket-VPN"
+    chmod 777 "$WORK_DIR/WebSocket-GO"
     read -rp "ENTER LISTENING PORT FOR WS (DEFAULT: 80): " ws_port
     ws_port=${ws_port:-80}
     read -rp "ENTER TARGET SSH PORT (DEFAULT: 22): " ssh_port
@@ -42,14 +42,14 @@ install_ws_ssh() {
     echo -e "${YELLOW}>> CREATING SYSTEMD SERVICE (WS-SSH)...${NC}"
     sudo tee /etc/systemd/system/ws-ssh.service > /dev/null <<EOF
 [Unit]
-Description=WEBSOCKET-VPN FOR SSH
+Description=WEBSOCKET-GO FOR SSH
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=$WORK_DIR
-ExecStart=$WORK_DIR/WebSocket-VPN -listenAddr :$ws_port -targetAddr 127.0.0.1:$ssh_port
+ExecStart=$WORK_DIR/WebSocket-GO -listenAddr :$ws_port -targetAddr 127.0.0.1:$ssh_port
 Restart=on-failure
 RestartSec=3
 
@@ -61,7 +61,7 @@ EOF
     sudo systemctl enable ws-ssh
     sudo systemctl restart ws-ssh
 
-    echo -e "${GREEN}✅ WEBSOCKET-VPN FOR SSH IS RUNNING ON PORT $ws_port (TARGET: $ssh_port)${NC}"
+    echo -e "${GREEN}✅ WEBSOCKET-GO FOR SSH IS RUNNING ON PORT $ws_port (TARGET: $ssh_port)${NC}"
     echo -e "PRESS [ENTER] TO RETURN..."
     read
 }
@@ -69,14 +69,14 @@ EOF
 # INSTALL WS FOR TROJAN + XRAY
 install_ws_trojan() {
     clear
-    echo -e "${CYAN}=== SETUP WEBSOCKET-VPN FOR TROJAN ===${NC}"
-    if [ ! -f "$WORK_DIR/WebSocket-VPN" ]; then
-        echo -e "${RED}❌ ERROR: 'WEBSOCKET-VPN' NOT FOUND IN $WORK_DIR${NC}"
+    echo -e "${CYAN}=== SETUP WEBSOCKET-GO FOR TROJAN ===${NC}"
+    if [ ! -f "$WORK_DIR/WebSocket-GO" ]; then
+        echo -e "${RED}❌ ERROR: 'WebSocket-GO' NOT FOUND IN $WORK_DIR${NC}"
         echo -e "PRESS [ENTER] TO RETURN..."
         read
         return
     fi
-    chmod 777 "$WORK_DIR/WebSocket-VPN"
+    chmod 777 "$WORK_DIR/WebSocket-GO"
 
     read -rp "ENTER LISTENING PORT FOR WS (DEFAULT: 8080): " ws_port
     ws_port=${ws_port:-8080}
@@ -128,14 +128,14 @@ EOF
     echo -e "${YELLOW}>> CREATING SYSTEMD SERVICE (WS-TROJAN)...${NC}"
     sudo tee /etc/systemd/system/ws-trojan.service > /dev/null <<EOF
 [Unit]
-Description=WEBSOCKET-VPN FOR TROJAN
+Description=WEBSOCKET-GO FOR TROJAN
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=$WORK_DIR
-ExecStart=$WORK_DIR/WebSocket-VPN -listenAddr :$ws_port -targetAddr 127.0.0.1:$port
+ExecStart=$WORK_DIR/WebSocket-GO -listenAddr :$ws_port -targetAddr 127.0.0.1:$port
 Restart=on-failure
 RestartSec=3
 
@@ -147,7 +147,7 @@ EOF
     sudo systemctl enable ws-trojan
     sudo systemctl restart ws-trojan
 
-    echo -e "${GREEN}✅ WEBSOCKET-VPN FOR TROJAN IS RUNNING ON PORT $ws_port (BACKEND: $port)${NC}"
+    echo -e "${GREEN}✅ WEBSOCKET-GO FOR TROJAN IS RUNNING ON PORT $ws_port (BACKEND: $port)${NC}"
     echo -e "🔹 TROJAN PASSWORD: $trojan_password"
     echo -e "PRESS [ENTER] TO RETURN..."
     read
