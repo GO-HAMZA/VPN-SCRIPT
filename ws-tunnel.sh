@@ -48,12 +48,13 @@ function install_ssh_ws() {
     prepare_system_and_download
     
     echo
-    read -rp "ENTER EXTERNAL PORT FOR SSH-WS (LISTEN PORT) [DEFAULT 80]: " ws_port
+    read -rp "🌐 LISTEN PORT [DEFAULT 80]: " ws_port
     ws_port=${ws_port:-80}
     
-    read -rp "ENTER INTERNAL SSH PORT (TARGET PORT) [DEFAULT 22]: " ssh_port
+    read -rp "⚙️ TARGET PORT [DEFAULT 22]: " ssh_port
     ssh_port=${ssh_port:-22}
 
+    echo
     echo -e "${YELLOW}⚙️ CREATING SYSTEMD SERVICE FOR SSH-WS...${NC}"
     sudo tee /etc/systemd/system/ssh-ws.service > /dev/null <<EOF
 [Unit]
@@ -96,19 +97,20 @@ function install_trojan_ws() {
     prepare_system_and_download
     
     echo
-    read -rp "ENTER A PASSWORD FOR TROJAN CLIENTS: " trojan_password
-    read -rp "ENTER EXTERNAL PORT FOR TROJAN-WS (LISTEN PORT) [DEFAULT 8080]: " ws_port
+    read -rp "🔑 TROJAN PASSWORD: " trojan_password
+    read -rp "🌐 LISTEN PORT [DEFAULT 8080]: " ws_port
     ws_port=${ws_port:-8080}
     
-    read -rp "ENTER INTERNAL XRAY PORT (TARGET PORT) [DEFAULT 2000]: " xray_port
+    read -rp "⚙️ TARGET PORT [DEFAULT 2000]: " xray_port
     xray_port=${xray_port:-2000}
 
     listen_ip="127.0.0.1"
 
+    echo
     echo -e "${YELLOW}📦 INSTALLING XRAY CORE...${NC}"
-    bash <(curl -L -s https://github.com/XTLS/Xray-install/raw/main/install-release.sh) > /dev/null 2>&1
+    curl -sL https://github.com/XTLS/Xray-install/raw/main/install-release.sh | sudo bash -s -- install > /dev/null 2>&1
 
-    sudo systemctl stop xray
+    sudo systemctl stop xray > /dev/null 2>&1
     sudo mkdir -p /usr/local/etc/xray
 
     echo -e "${YELLOW}⚙️ CONFIGURING XRAY...${NC}"
@@ -278,7 +280,7 @@ while true; do
     echo -e "  ${YELLOW}[02]${NC} INSTALL TROJAN WS"
     echo -e "  ${YELLOW}[03]${NC} RESTART SERVICES"
     echo -e "  ${YELLOW}[04]${NC} CHECK SERVICE STATUS"
-    echo -e "  ${YELLOW}[05]${NC} UNINSTALL ALL SERVICES"
+    echo -e "  ${YELLOW}[05]${NC} UNINSTALL SERVICES"
     echo -e "  ${YELLOW}[00]${NC} EXIT"
     echo -e "${L_BLUE}========================================${NC}"
     read -rp "➡️ [0-5]: " choice
@@ -294,7 +296,7 @@ while true; do
             exit 0
             ;;
         *)
-            echo -e "${RED} INVALID OPTION! PLEASE TRY AGAIN.${NC}"
+            echo -e "${RED}❌ INVALID OPTION! PLEASE TRY AGAIN.${NC}"
             sleep 2
             ;;
     esac
