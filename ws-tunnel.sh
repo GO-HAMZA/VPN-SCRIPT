@@ -4,11 +4,13 @@
 # COLOR CONFIGURATION
 # ==========================================
 RED='\033[0;31m'
+B_RED='\033[1;31m'   # BOLD RED
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-L_BLUE='\033[1;36m' # LIGHT BLUE
-NC='\033[0m' # NO COLOR
+L_BLUE='\033[1;36m'  # LIGHT BLUE
+D_BLUE='\033[0;34m'  # DARK BLUE
+NC='\033[0m'         # NO COLOR
 
 # ==========================================
 # HELPER: PAUSE BEFORE RETURNING TO MENU
@@ -184,10 +186,10 @@ function restart_services() {
     echo -e "${L_BLUE}========================================${NC}"
     echo -e "${CYAN}             RESTART SERVICES           ${NC}"
     echo -e "${L_BLUE}========================================${NC}"
-    echo -e "  ${YELLOW}1.${NC} RESTART SSH WS"
-    echo -e "  ${YELLOW}2.${NC} RESTART TROJAN WS (XRAY)"
-    echo
-    read -rp "SELECT THE SERVICE TO RESTART [1-2]: " srv_choice
+    echo -e "  ${YELLOW}[01]${NC} RESTART SSH WS"
+    echo -e "  ${YELLOW}[02]${NC} RESTART TROJAN WS (XRAY)"
+    echo -e "${L_BLUE}========================================${NC}"
+    read -rp "➡️ [1-2]: " srv_choice
     
     echo
     case $srv_choice in
@@ -220,8 +222,8 @@ function check_status() {
     echo -e "${L_BLUE}========================================${NC}"
     echo -e "  ${YELLOW}[01]${NC} STATUS OF SSH WS"
     echo -e "  ${YELLOW}[02]${NC} STATUS OF TROJAN WS"
-    echo
-    read -rp "SELECT THE SERVICE TO CHECK [1-2]: " stat_choice
+    echo -e "${L_BLUE}========================================${NC}"
+    read -rp "➡️ [1-2]: " stat_choice
     
     echo
     case $stat_choice in
@@ -274,14 +276,14 @@ function uninstall_all() {
 while true; do
     clear # THIS CLEARS THE SCREEN SO ONLY THE MENU IS VISIBLE
     echo -e "${L_BLUE}========================================${NC}"
-    echo -e "${GREEN}       V P N   I N S T A L L E R        ${NC}"
+    echo -e "${B_RED}       V P N   I N S T A L L E R        ${NC}"
     echo -e "${L_BLUE}========================================${NC}"
-    echo -e "  ${YELLOW}[01]${NC} INSTALL SSH WS"
-    echo -e "  ${YELLOW}[02]${NC} INSTALL TROJAN WS"
-    echo -e "  ${YELLOW}[03]${NC} RESTART SERVICES"
-    echo -e "  ${YELLOW}[04]${NC} CHECK SERVICE STATUS"
-    echo -e "  ${YELLOW}[05]${NC} UNINSTALL SERVICES"
-    echo -e "  ${YELLOW}[00]${NC} EXIT"
+    echo -e "  ${YELLOW}[01]${NC} ${D_BLUE}INSTALL SSH WS${NC}"
+    echo -e "  ${YELLOW}[02]${NC} ${D_BLUE}INSTALL TROJAN WS${NC}"
+    echo -e "  ${YELLOW}[03]${NC} ${D_BLUE}RESTART SERVICES${NC}"
+    echo -e "  ${YELLOW}[04]${NC} ${D_BLUE}CHECK SERVICE STATUS${NC}"
+    echo -e "  ${YELLOW}[05]${NC} ${D_BLUE}UNINSTALL SERVICES${NC}"
+    echo -e "  ${YELLOW}[00]${NC} ${D_BLUE}EXIT${NC}"
     echo -e "${L_BLUE}========================================${NC}"
     read -rp "➡️ [0-5]: " choice
 
