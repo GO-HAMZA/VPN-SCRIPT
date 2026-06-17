@@ -22,12 +22,12 @@ function pause_menu() {
 # PREPARE SYSTEM AND DOWNLOAD WEBSOCKET-VPN
 # ==========================================
 function prepare_system_and_download() {
-    echo -e "${YELLOW}🔄 UPDATING SYSTEM AND INSTALLING DEPENDENCIES (CURL, UNZIP)...${NC}"
+    echo -e "${YELLOW}🔄 UPDATING SYSTEM AND INSTALLING DEPENDENCIES${NC}"
     sudo apt update -y > /dev/null 2>&1
     sudo apt install curl unzip -y > /dev/null 2>&1
 
     if [ ! -f "/usr/local/bin/WebSocket-VPN" ]; then
-        echo -e "${YELLOW}⬇️ DOWNLOADING WEBSOCKET-VPN FROM GITHUB...${NC}"
+        echo -e "${YELLOW}⬇️ DOWNLOADING WEBSOCKET-VPN FROM GITHUB${NC}"
         curl -s -o WebSocket-VPN https://raw.githubusercontent.com/GO-HAMZA/VPN-SCRIPT/main/WebSocket-VPN
         
         chmod 777 WebSocket-VPN
@@ -218,8 +218,8 @@ function check_status() {
     echo -e "${L_BLUE}========================================${NC}"
     echo -e "${CYAN}           CHECK SERVICE STATUS         ${NC}"
     echo -e "${L_BLUE}========================================${NC}"
-    echo -e "  ${YELLOW}1.${NC} STATUS OF SSH WS"
-    echo -e "  ${YELLOW}2.${NC} STATUS OF TROJAN WS (XRAY)"
+    echo -e "  ${YELLOW}[01]${NC} STATUS OF SSH WS"
+    echo -e "  ${YELLOW}[02]${NC} STATUS OF TROJAN WS"
     echo
     read -rp "SELECT THE SERVICE TO CHECK [1-2]: " stat_choice
     
