@@ -280,12 +280,12 @@ while true; do
     echo -e "${CYAN}   ╚═══╝  ╚═╝     ╚═╝  ╚═══╝ ${NC}"
     echo -e "${GREEN}       V P N   I N S T A L L E R        ${NC}"
     echo -e "${L_BLUE}========================================${NC}"
-    echo -e "  ${YELLOW}1.${NC} INSTALL SSH WS"
-    echo -e "  ${YELLOW}2.${NC} INSTALL TROJAN WS"
-    echo -e "  ${YELLOW}3.${NC} RESTART SERVICES"
-    echo -e "  ${YELLOW}4.${NC} CHECK SERVICE STATUS"
-    echo -e "  ${YELLOW}5.${NC} UNINSTALL ALL SERVICES"
-    echo -e "  ${YELLOW}0.${NC} EXIT"
+    echo -e "  ${YELLOW}[01]${NC} INSTALL SSH WS"
+    echo -e "  ${YELLOW}[02]${NC} INSTALL TROJAN WS"
+    echo -e "  ${YELLOW}[03]${NC} RESTART SERVICES"
+    echo -e "  ${YELLOW}[04]${NC} CHECK SERVICE STATUS"
+    echo -e "  ${YELLOW}[05]${NC} UNINSTALL ALL SERVICES"
+    echo -e "  ${YELLOW}[00]${NC} EXIT"
     echo -e "${L_BLUE}========================================${NC}"
     read -rp "➡️ [0-5]: " choice
 
