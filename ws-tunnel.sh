@@ -7,7 +7,16 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+L_BLUE='\033[1;36m' # LIGHT BLUE
 NC='\033[0m' # NO COLOR
+
+# ==========================================
+# HELPER: PAUSE BEFORE RETURNING TO MENU
+# ==========================================
+function pause_menu() {
+    echo
+    read -rp "PRESS ENTER TO RETURN TO MAIN MENU..."
+}
 
 # ==========================================
 # PREPARE SYSTEM AND DOWNLOAD WEBSOCKET-VPN
@@ -32,10 +41,13 @@ function prepare_system_and_download() {
 # ==========================================
 function install_ssh_ws() {
     clear
-    echo -e "${CYAN}=== INSTALL SSH OVER WEBSOCKET ===${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
+    echo -e "${CYAN}        INSTALL SSH OVER WEBSOCKET      ${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     
     prepare_system_and_download
     
+    echo
     read -rp "ENTER EXTERNAL PORT FOR SSH-WS (LISTEN PORT) [DEFAULT 80]: " ws_port
     ws_port=${ws_port:-80}
     
@@ -68,7 +80,8 @@ EOF
     echo -e "EXTERNAL PORT : ${CYAN}$ws_port${NC}"
     echo -e "TARGET PORT   : ${CYAN}$ssh_port (SSH)${NC}"
     echo -e "SERVICE NAME  : ${CYAN}SSH-WS${NC}"
-    echo
+    
+    pause_menu
 }
 
 # ==========================================
@@ -76,10 +89,13 @@ EOF
 # ==========================================
 function install_trojan_ws() {
     clear
-    echo -e "${CYAN}=== INSTALL TROJAN OVER WEBSOCKET ===${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
+    echo -e "${CYAN}       INSTALL TROJAN OVER WEBSOCKET    ${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     
     prepare_system_and_download
     
+    echo
     read -rp "ENTER A PASSWORD FOR TROJAN CLIENTS: " trojan_password
     read -rp "ENTER EXTERNAL PORT FOR TROJAN-WS (LISTEN PORT) [DEFAULT 8080]: " ws_port
     ws_port=${ws_port:-8080}
@@ -154,7 +170,8 @@ EOF
     echo -e "XRAY LOCAL PORT : ${CYAN}$xray_port${NC}"
     echo -e "TROJAN PASSWORD : ${CYAN}$trojan_password${NC}"
     echo -e "SERVICE NAMES   : ${CYAN}XRAY, TROJAN-WS${NC}"
-    echo
+    
+    pause_menu
 }
 
 # ==========================================
@@ -162,11 +179,15 @@ EOF
 # ==========================================
 function restart_services() {
     clear
-    echo -e "${CYAN}=== RESTART SERVICES ===${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
+    echo -e "${CYAN}             RESTART SERVICES           ${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     echo -e "  ${YELLOW}1.${NC} RESTART SSH WS"
     echo -e "  ${YELLOW}2.${NC} RESTART TROJAN WS (XRAY)"
+    echo
     read -rp "SELECT THE SERVICE TO RESTART [1-2]: " srv_choice
     
+    echo
     case $srv_choice in
         1)
             echo -e "${YELLOW}🔄 RESTARTING SSH-WS SERVICE...${NC}"
@@ -183,7 +204,8 @@ function restart_services() {
             echo -e "${RED}❌ INVALID CHOICE!${NC}"
             ;;
     esac
-    echo
+    
+    pause_menu
 }
 
 # ==========================================
@@ -191,11 +213,15 @@ function restart_services() {
 # ==========================================
 function check_status() {
     clear
-    echo -e "${CYAN}=== CHECK SERVICE STATUS ===${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
+    echo -e "${CYAN}           CHECK SERVICE STATUS         ${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     echo -e "  ${YELLOW}1.${NC} STATUS OF SSH WS"
     echo -e "  ${YELLOW}2.${NC} STATUS OF TROJAN WS (XRAY)"
+    echo
     read -rp "SELECT THE SERVICE TO CHECK [1-2]: " stat_choice
     
+    echo
     case $stat_choice in
         1)
             echo -e "${YELLOW}ℹ️ FETCHING SSH-WS STATUS...${NC}"
@@ -204,15 +230,15 @@ function check_status() {
         2)
             echo -e "${YELLOW}ℹ️ FETCHING TROJAN-WS AND XRAY STATUS...${NC}"
             sudo systemctl status trojan-ws --no-pager
-            echo -e "${YELLOW}------------------------------------------------${NC}"
+            echo -e "${L_BLUE}----------------------------------------${NC}"
             sudo systemctl status xray --no-pager
             ;;
         *)
             echo -e "${RED}❌ INVALID CHOICE!${NC}"
             ;;
     esac
-    echo
-    read -rp "PRESS ENTER TO RETURN TO MAIN MENU..."
+    
+    pause_menu
 }
 
 # ==========================================
@@ -220,7 +246,9 @@ function check_status() {
 # ==========================================
 function uninstall_all() {
     clear
-    echo -e "${RED}=== UNINSTALL & CLEAN UP ===${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
+    echo -e "${RED}          UNINSTALL & CLEAN UP          ${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     echo -e "${YELLOW}STOPPING AND REMOVING ALL SERVICES...${NC}"
     
     sudo systemctl stop ssh-ws trojan-ws xray 2>/dev/null
@@ -232,48 +260,48 @@ function uninstall_all() {
     sudo rm -f /usr/local/bin/WebSocket-VPN
     
     sudo systemctl daemon-reload
-    echo -e "${GREEN}✅ ALL CUSTOM SERVICES AND FILES HAVE BEEN COMPLETELY REMOVED.${NC}"
     echo
+    echo -e "${GREEN}✅ ALL CUSTOM SERVICES AND FILES HAVE BEEN COMPLETELY REMOVED.${NC}"
+    
+    pause_menu
 }
 
 # ==========================================
 # MAIN MENU
 # ==========================================
 while true; do
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${CYAN}        WEBSOCKET VPN INSTALLER         ${NC}"
-    echo -e "${GREEN}========================================${NC}"
+    clear # THIS CLEARS THE SCREEN SO ONLY THE MENU IS VISIBLE
+    echo -e "${L_BLUE}========================================${NC}"
+    echo -e "${CYAN} ██╗   ██╗██████╗ ███╗   ██╗ ${NC}"
+    echo -e "${CYAN} ██║   ██║██╔══██╗████╗  ██║ ${NC}"
+    echo -e "${CYAN} ██║   ██║██████╔╝██╔██╗ ██║ ${NC}"
+    echo -e "${CYAN} ╚██╗ ██╔╝██╔═══╝ ██║╚██╗██║ ${NC}"
+    echo -e "${CYAN}  ╚████╔╝ ██║     ██║ ╚████║ ${NC}"
+    echo -e "${CYAN}   ╚═══╝  ╚═╝     ╚═╝  ╚═══╝ ${NC}"
+    echo -e "${GREEN}       V P N   I N S T A L L E R        ${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     echo -e "  ${YELLOW}1.${NC} INSTALL SSH WS"
     echo -e "  ${YELLOW}2.${NC} INSTALL TROJAN WS"
     echo -e "  ${YELLOW}3.${NC} RESTART SERVICES"
     echo -e "  ${YELLOW}4.${NC} CHECK SERVICE STATUS"
     echo -e "  ${YELLOW}5.${NC} UNINSTALL ALL SERVICES"
     echo -e "  ${YELLOW}0.${NC} EXIT"
-    echo -e "${GREEN}========================================${NC}"
+    echo -e "${L_BLUE}========================================${NC}"
     read -rp "➡️ [0-5]: " choice
 
     case $choice in
-        1)
-            install_ssh_ws
-            ;;
-        2)
-            install_trojan_ws
-            ;;
-        3)
-            restart_services
-            ;;
-        4)
-            check_status
-            ;;
-        5)
-            uninstall_all
-            ;;
+        1) install_ssh_ws ;;
+        2) install_trojan_ws ;;
+        3) restart_services ;;
+        4) check_status ;;
+        5) uninstall_all ;;
         0)
             echo -e "${YELLOW}EXITING...${NC}"
             exit 0
             ;;
         *)
-            echo -e "${RED}❌ INVALID OPTION! PLEASE TRY AGAIN.${NC}\n"
+            echo -e "${RED}❌ INVALID OPTION! PLEASE TRY AGAIN.${NC}"
+            sleep 2
             ;;
     esac
 done
