@@ -272,12 +272,6 @@ function uninstall_all() {
 while true; do
     clear # THIS CLEARS THE SCREEN SO ONLY THE MENU IS VISIBLE
     echo -e "${L_BLUE}========================================${NC}"
-    echo -e "${CYAN} ██╗   ██╗██████╗ ███╗   ██╗ ${NC}"
-    echo -e "${CYAN} ██║   ██║██╔══██╗████╗  ██║ ${NC}"
-    echo -e "${CYAN} ██║   ██║██████╔╝██╔██╗ ██║ ${NC}"
-    echo -e "${CYAN} ╚██╗ ██╔╝██╔═══╝ ██║╚██╗██║ ${NC}"
-    echo -e "${CYAN}  ╚████╔╝ ██║     ██║ ╚████║ ${NC}"
-    echo -e "${CYAN}   ╚═══╝  ╚═╝     ╚═╝  ╚═══╝ ${NC}"
     echo -e "${GREEN}       V P N   I N S T A L L E R        ${NC}"
     echo -e "${L_BLUE}========================================${NC}"
     echo -e "  ${YELLOW}[01]${NC} INSTALL SSH WS"
