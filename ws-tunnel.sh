@@ -189,12 +189,12 @@ function restart_services() {
     
     echo
     case $srv_choice in
-        1)
+        1|01)
             echo -e "${YELLOW}🔄 RESTARTING SSH-WS SERVICE...${NC}"
             sudo systemctl restart ssh-ws
             echo -e "${GREEN}✅ SSH-WS RESTARTED SUCCESSFULLY!${NC}"
             ;;
-        2)
+        2|02)
             echo -e "${YELLOW}🔄 RESTARTING XRAY AND TROJAN-WS SERVICES...${NC}"
             sudo systemctl restart xray
             sudo systemctl restart trojan-ws
@@ -223,11 +223,11 @@ function check_status() {
     
     echo
     case $stat_choice in
-        1)
+        1|01)
             echo -e "${YELLOW}ℹ️ FETCHING SSH-WS STATUS...${NC}"
             sudo systemctl status ssh-ws --no-pager
             ;;
-        2)
+        2|02)
             echo -e "${YELLOW}ℹ️ FETCHING TROJAN-WS AND XRAY STATUS...${NC}"
             sudo systemctl status trojan-ws --no-pager
             echo -e "${L_BLUE}----------------------------------------${NC}"
@@ -284,17 +284,17 @@ while true; do
     read -rp "➡️ [0-5]: " choice
 
     case $choice in
-        1) install_ssh_ws ;;
-        2) install_trojan_ws ;;
-        3) restart_services ;;
-        4) check_status ;;
-        5) uninstall_all ;;
-        0)
+        1|01) install_ssh_ws ;;
+        2|02) install_trojan_ws ;;
+        3|03) restart_services ;;
+        4|04) check_status ;;
+        5|05) uninstall_all ;;
+        0|00)
             echo -e "${YELLOW}EXITING...${NC}"
             exit 0
             ;;
         *)
-            echo -e "${RED}❌ INVALID OPTION! PLEASE TRY AGAIN.${NC}"
+            echo -e "${RED} INVALID OPTION! PLEASE TRY AGAIN.${NC}"
             sleep 2
             ;;
     esac
