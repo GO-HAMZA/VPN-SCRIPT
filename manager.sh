@@ -166,7 +166,7 @@ pause() { echo -e "\n${BLUE}PRESS [ENTER] TO RETURN...${NC}"; read; }
 draw_header() {
     clear
     echo -e "${LINE}"
-    echo -e "             ⚡ ${BLUE}SSH MANAGER V 10 (SECURE)${NC} ⚡"
+    echo -e "     ${BLUE}====== SSH • MANAGER ======${NC}"
     echo -e "${LINE}"
 }
 
