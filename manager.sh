@@ -25,13 +25,14 @@ MIGRATION_FILE="/root/migration_users.txt"
 VENV_DIR="/etc/xpanel/venv"
 PYTHON_BIN="$VENV_DIR/bin/python3"
 PIP_BIN="$VENV_DIR/bin/pip3"
+DB_LOCK="/etc/xpanel/.db.lock"
 
 RED=$'\033[1;31m'; GREEN=$'\033[1;32m'; YELLOW=$'\033[1;33m'
 BLUE=$'\033[1;34m'; CYAN=$'\033[1;36m'; NC=$'\033[0m'; WHITE=$'\033[1;37m'
 LINE="${BLUE}===============================================${NC}"
 
 mkdir -p /etc/xpanel "$BACKUP_DIR"
-touch "$USER_DB" "$LOG_FILE"
+touch "$USER_DB" "$LOG_FILE" "$DB_LOCK"
 [[ ! -f "$BOT_CONF" ]] && touch "$BOT_CONF"
 
 # Ensure essential packages are installed
@@ -53,6 +54,7 @@ import datetime, subprocess, os, time, fcntl
 import urllib.request, urllib.parse
 
 DB_FILE = "/etc/xpanel/users_db.txt"
+LOCK_FILE = "/etc/xpanel/.db.lock"
 CONF_FILE = "/etc/xpanel/bot.conf"
 LOG_FILE = "/var/log/kp_manager.log"
 alert_cache = {}
@@ -97,45 +99,45 @@ def kill_user(user):
 def check_loop():
     while True:
         try:
-            if os.path.exists(DB_FILE):
-                with open(DB_FILE, 'r+') as f:
-                    fcntl.flock(f, fcntl.LOCK_EX)
-                    lines = f.readlines()
-                    new_lines = []
-                    status_changed = False
-                    now = datetime.datetime.now()
-                    
-                    for line in lines:
-                        parts = line.strip().split('|')
-                        if len(parts) < 3: continue
-                        user, exp_date, exp_time = parts[0], parts[1], parts[2]
-
-                        if "V1" in user or "Turbo" in user or user == "root":
-                            new_lines.append(line); continue
+            with open(LOCK_FILE, "a") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                if os.path.exists(DB_FILE):
+                    with open(DB_FILE, 'r+') as f:
+                        lines = f.readlines()
+                        new_lines = []
+                        status_changed = False
+                        now = datetime.datetime.now()
                         
-                        expired = False
-                        if exp_date.upper() not in ["NEVER", "EXPIRED"]:
-                            try:
-                                exp = datetime.datetime.strptime(f"{exp_date} {exp_time}", "%Y-%m-%d %H:%M")
-                                if now >= exp:
-                                    kill_user(user)
-                                    status_changed = True; expired = True
-                                    log_event(f"ACCOUNT EXPIRED: {user} locked and disconnected.")
-                                    send_alert(f"🔒 <b>ACCOUNT EXPIRED</b>\n\n👤 User: <code>{user}</code>\n🛑 Account forcefully disconnected.", f"{user}_exp")
-                            except: pass
-                        
-                        if expired:
-                            new_lines.append(f"{user}|EXPIRED|00:00\n")
-                            continue
+                        for line in lines:
+                            parts = line.strip().split('|')
+                            if len(parts) < 3: continue
+                            user, exp_date, exp_time = parts[0], parts[1], parts[2]
 
-                        new_lines.append(line)
-                    
-                    if status_changed:
-                        f.seek(0)
-                        f.writelines(new_lines)
-                        f.truncate()
-                    
-                    fcntl.flock(f, fcntl.LOCK_UN)
+                            if "V1" in user or "Turbo" in user or user == "root":
+                                new_lines.append(line); continue
+                            
+                            expired = False
+                            if exp_date.upper() not in ["NEVER", "EXPIRED"]:
+                                try:
+                                    exp = datetime.datetime.strptime(f"{exp_date} {exp_time}", "%Y-%m-%d %H:%M")
+                                    if now >= exp:
+                                        kill_user(user)
+                                        status_changed = True; expired = True
+                                        log_event(f"ACCOUNT EXPIRED: {user} locked and disconnected.")
+                                        send_alert(f"🔒 <b>ACCOUNT EXPIRED</b>\n\n👤 User: <code>{user}</code>\n🛑 Account forcefully disconnected.", f"{user}_exp")
+                                except: pass
+                            
+                            if expired:
+                                new_lines.append(f"{user}|EXPIRED|00:00\n")
+                                continue
+
+                            new_lines.append(line)
+                        
+                        if status_changed:
+                            f.seek(0)
+                            f.writelines(new_lines)
+                            f.truncate()
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
         except: pass
         time.sleep(10)
 
@@ -351,19 +353,29 @@ fun_search() {
 
 fun_monitor_view() {
     clear
-    echo -e "${LINE}\n               👁 ${BLUE}MONITOR ACCOUNT${NC}\n${LINE}"
-    ACTIVE_PROCS=$(ps -eo user,comm 2>/dev/null | grep -E 'sshd|dropbear')
+    echo -e "${LINE}\n               👁 ${BLUE}LIVE SSH MONITOR (PRO VERSION)${NC}\n${LINE}"
+    
+    ACTIVE_USERS_DATA=$(ps -axo user:32,comm 2>/dev/null | grep -E 'sshd|dropbear' | awk '{print $1}' | sort | uniq -c)
+    TOTAL_PIDS=$(echo "$ACTIVE_USERS_DATA" | awk '{sum+=$1} END {print sum+0}')
+    
+    echo -e " ${YELLOW}📊 إجمالي العمليات (PIDs) النشطة للعملاء:${NC} ${WHITE}$TOTAL_PIDS${NC}\n${LINE}"
+
     while IFS='|' read -r u d t rest; do
         [[ -z "$u" ]] && continue
+        
         if id "$u" &>/dev/null; then
-             if echo "$ACTIVE_PROCS" | grep -q "^${u} "; then
-                 STATUS="${GREEN}🟢 ONLINE${NC}"
+             USER_CONN_COUNT=$(echo "$ACTIVE_USERS_DATA" | grep -w "$u" | awk '{print $1}')
+             
+             if [[ -n "$USER_CONN_COUNT" && "$USER_CONN_COUNT" -gt 0 ]]; then
+                 STATUS="${GREEN}🟢 ONLINE (${USER_CONN_COUNT} PIDs)${NC}"
              else
                  STATUS="${RED}🔴 OFFLINE${NC}"
              fi
-             printf " ${BLUE}👤 %-12s${NC}   %s\n" "$u" "$STATUS"
+             
+             printf " ${BLUE}👤 %-16s${NC} %s\n" "$u" "$STATUS"
         fi
     done < "$USER_DB"
+    
     echo -e "${LINE}"
     pause
 }
@@ -392,7 +404,12 @@ fun_import_users() {
             echo -e " CREATED: ${GREEN}$u${NC}"; ((count++))
         fi
     done < "$MIGRATION_FILE"
-    cat "$MIGRATION_FILE" > "$USER_DB"
+    
+    (
+        flock -x 200
+        cat "$MIGRATION_FILE" > "$USER_DB"
+    ) 200>"/etc/xpanel/.db.lock"
+
     echo -e "\n${GREEN} ✅ RESTORED: $count USERS${NC}"; pause
 }
 
@@ -448,6 +465,7 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageH
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(message)s')
 CONF_FILE = "/etc/xpanel/bot.conf"
 DB_FILE = "/etc/xpanel/users_db.txt"
+LOCK_FILE = "/etc/xpanel/.db.lock"
 LOG_FILE = "/var/log/kp_manager.log"
 TLINE = "============================"
 
@@ -512,10 +530,11 @@ def btn(u, c):
             subprocess.run(["useradd", "-M", "-s", "/bin/false", usr], stdout=subprocess.DEVNULL)
             subprocess.run(["chpasswd"], input=f"{usr}:{pwd}".encode(), stdout=subprocess.DEVNULL)
             
-            with open(DB_FILE, 'a') as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(f"{usr}|{dt}|{tm}\n")
-                fcntl.flock(f, fcntl.LOCK_UN)
+            with open(LOCK_FILE, "a") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                with open(DB_FILE, 'a') as f:
+                    f.write(f"{usr}|{dt}|{tm}\n")
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
                 
             resp = (f"<b>{TLINE}</b>\n           <b>ACCOUNT CREATED</b>          \n<b>{TLINE}</b>\n\n👤 Username : <code>{usr}</code>\n🔑 Password : <code>{pwd}</code>\n📅 Expiry   : <code>{dt}</code>\n⏰ Time     : <code>{tm}</code>\n\n<b>{TLINE}</b>\n📋 Copy     : <code>{usr}:{pwd}</code>\n<b>{TLINE}</b>")
             q.edit_message_text(resp, parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
@@ -531,12 +550,13 @@ def btn(u, c):
             
         elif d == 'ren_no':
             usr = c.user_data.get('ru')
-            with open(DB_FILE, 'r+') as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
-                lines.append(f"{usr}|NEVER|00:00\n")
-                f.seek(0); f.writelines(lines); f.truncate()
-                fcntl.flock(f, fcntl.LOCK_UN)
+            with open(LOCK_FILE, "a") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                with open(DB_FILE, 'r+') as f:
+                    lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
+                    lines.append(f"{usr}|NEVER|00:00\n")
+                    f.seek(0); f.writelines(lines); f.truncate()
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
                 
             subprocess.run(["usermod", "-U", usr], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             q.edit_message_text(f"✅ <b>RENEWED & UNLOCKED:</b> <code>{usr}</code>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
@@ -551,11 +571,12 @@ def btn(u, c):
                 kill_user(usr)
                 subprocess.run(["userdel", "-f", usr], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if os.path.exists(DB_FILE):
-                    with open(DB_FILE, 'r+') as f:
-                        fcntl.flock(f, fcntl.LOCK_EX)
-                        lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
-                        f.seek(0); f.writelines(lines); f.truncate()
-                        fcntl.flock(f, fcntl.LOCK_UN)
+                    with open(LOCK_FILE, "a") as lock_f:
+                        fcntl.flock(lock_f, fcntl.LOCK_EX)
+                        with open(DB_FILE, 'r+') as f:
+                            lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
+                            f.seek(0); f.writelines(lines); f.truncate()
+                        fcntl.flock(lock_f, fcntl.LOCK_UN)
                 q.edit_message_text(f"🗑️ <b>DELETED:</b> <code>{usr}</code>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
                 
         elif d == 'del_no':
@@ -619,7 +640,7 @@ def btn(u, c):
         elif d == 'onl':
             if os.path.exists(DB_FILE):
                 try:
-                    active_users_raw = subprocess.getoutput("ps -eo user,comm | grep -E 'sshd|dropbear' | awk '{print $1}'").split()
+                    active_users_raw = subprocess.getoutput("ps -axo user:32,comm | grep -E 'sshd|dropbear' | awk '{print $1}'").split()
                     active_set = set(active_users_raw)
                 except: active_set = set()
                 
@@ -770,10 +791,11 @@ def txt(u, c):
             subprocess.run(["useradd", "-M", "-s", "/bin/false", usr], stdout=subprocess.DEVNULL)
             subprocess.run(["chpasswd"], input=f"{usr}:{pwd}".encode(), stdout=subprocess.DEVNULL)
             
-            with open(DB_FILE, 'a') as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(f"{usr}|{d}|{t}\n")
-                fcntl.flock(f, fcntl.LOCK_UN)
+            with open(LOCK_FILE, "a") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                with open(DB_FILE, 'a') as f:
+                    f.write(f"{usr}|{d}|{t}\n")
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
                 
             resp = (f"<b>{TLINE}</b>\n           <b>ACCOUNT CREATED</b>          \n<b>{TLINE}</b>\n\n👤 Username : <code>{usr}</code>\n🔑 Password : <code>{pwd}</code>\n📅 Expiry   : <code>{d}</code>\n⏰ Time     : <code>{t}</code>\n\n<b>{TLINE}</b>\n📋 Copy     : <code>{usr}:{pwd}</code>\n<b>{TLINE}</b>")
             u.message.reply_text(resp, parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
@@ -790,12 +812,13 @@ def txt(u, c):
             else:
                 d = "NEVER"; t = "23:59"
             
-            with open(DB_FILE, 'r+') as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
-                lines.append(f"{usr}|{d}|{t}\n")
-                f.seek(0); f.writelines(lines); f.truncate()
-                fcntl.flock(f, fcntl.LOCK_UN)
+            with open(LOCK_FILE, "a") as lock_f:
+                fcntl.flock(lock_f, fcntl.LOCK_EX)
+                with open(DB_FILE, 'r+') as f:
+                    lines = [l for l in f.readlines() if not l.startswith(f"{usr}|")]
+                    lines.append(f"{usr}|{d}|{t}\n")
+                    f.seek(0); f.writelines(lines); f.truncate()
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
                 
             subprocess.run(["usermod", "-U", usr], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             u.message.reply_text(f"✅ <b>RENEWED & UNLOCKED:</b> <code>{usr}</code>", parse_mode=ParseMode.HTML, reply_markup=get_back_btn())
