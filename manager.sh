@@ -353,7 +353,7 @@ fun_search() {
 
 fun_monitor_view() {
     clear
-    echo -e "${LINE}\n👁 ${BLUE}LIVE SSH MONITOR ${NC}\n${LINE}"
+    echo -e "${LINE}\n          👁 ${BLUE}LIVE SSH MONITOR ${NC}\n${LINE}"
     
     ACTIVE_USERS_DATA=$(ps -axo user:32,comm 2>/dev/null | grep -E 'sshd|dropbear' | awk '{print $1}' | sort | uniq -c)
     
