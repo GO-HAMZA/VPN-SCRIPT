@@ -166,7 +166,7 @@ pause() { echo -e "\n${BLUE}PRESS [ENTER] TO RETURN...${NC}"; read; }
 draw_header() {
     clear
     echo -e "${LINE}"
-    echo -e "               ${BLUE}=== SSH • MANAGER ===${NC}"
+    echo -e "             ${BLUE}=== SSH • MANAGER ===${NC}"
     echo -e "${LINE}"
 }
 
@@ -353,7 +353,7 @@ fun_search() {
 
 fun_monitor_view() {
     clear
-    echo -e "${LINE}\n   ${BLUE}========== 👁 ${BLUE}LIVE SSH MONITOR =========${NC}\n${LINE}"
+    echo -e "${LINE}\n   ${BLUE}========== 👁 ${BLUE}LIVE SSH MONITOR ==========${NC}\n${LINE}"
     
     ACTIVE_USERS_DATA=$(ps -axo user:32,comm 2>/dev/null | grep -E 'sshd|dropbear' | awk '{print $1}' | sort | uniq -c)
     
