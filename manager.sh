@@ -353,7 +353,7 @@ fun_search() {
 
 fun_monitor_view() {
     clear
-    echo -e "${LINE}\n          👁 ${BLUE}LIVE SSH MONITOR ${NC}\n${LINE}"
+    echo -e "${LINE}\n    ========== 👁 ${BLUE}LIVE SSH MONITOR =========${NC}\n${LINE}"
     
     ACTIVE_USERS_DATA=$(ps -axo user:32,comm 2>/dev/null | grep -E 'sshd|dropbear' | awk '{print $1}' | sort | uniq -c)
     
@@ -364,7 +364,7 @@ fun_monitor_view() {
              USER_CONN_COUNT=$(echo "$ACTIVE_USERS_DATA" | grep -w "$u" | awk '{print $1}')
              
              if [[ -n "$USER_CONN_COUNT" && "$USER_CONN_COUNT" -gt 0 ]]; then
-                 STATUS="${GREEN}🟢 ONLINE [${USER_CONN_COUNT}]${NC}"
+                 STATUS="${GREEN}🟢 ONLINE [ ${USER_CONN_COUNT} ]${NC}"
              else
                  STATUS="${RED}🔴 OFFLINE${NC}"
              fi
